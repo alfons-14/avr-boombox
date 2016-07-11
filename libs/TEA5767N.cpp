@@ -14,8 +14,8 @@
    limitations under the License.
 */
 
-#include "TWI.h"
-#include "TEA5767N.h"
+#include "../drivers/TWI.h"
+#include "../libs/TEA5767N.h"
 #include <util/delay.h>
 
 TEA5767N::TEA5767N() {
