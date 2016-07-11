@@ -36,9 +36,6 @@ void TWI_send(uint8_t adress, uint8_t *data, uint8_t data_count){
 	TWI_ADRESS = (adress << 1) | TWI_WRITE;
 	TWI_DATA = data;
 	TWI_DATA_COUNT = data_count;
-//	char buf[20];
-//	sprintf(buf, "\r\nSend to %X adr %d, val %d\r\n", TWI_ADRESS, TWI_DATA[0], TWI_DATA[1]);
-//	UART_send(buf);
 	TWI.busy = 1;
 	TWI_START;
 	SREG = sreg;
