@@ -14,7 +14,7 @@ void UART_init (){
 	UCSRB = ( 1 << TXEN ) | ( 1 << RXEN );
 }
 
-void UART_send(char a){ // single symvol
+void UART_send(char a){ // single char
 	while( ( UCSRA & ( 1 << UDRE ) ) == 0 );
 	UDR = a;
 }
