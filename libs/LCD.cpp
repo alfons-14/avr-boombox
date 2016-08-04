@@ -7,7 +7,7 @@
 
 #include <util/delay.h>
 #include "../drivers/TWI.h"
-#include "../libs/LCD.h"
+#include "LCD.h"
 
 volatile unsigned char Led_port=0;
 

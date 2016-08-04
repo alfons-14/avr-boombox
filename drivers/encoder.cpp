@@ -24,7 +24,7 @@ void encoder_init(){
 	TIMSK2|=(1 << OCIE2A);
 	TCCR2A= (1<<WGM21)|(0<<WGM20);
 	TCCR2B= (1<<CS22)|(1<<CS21)|(0<<CS20); //CTC mode, clck/64
-	OCR2A = 20;
+	OCR2A = 5;
 }
 
 int8_t encoder_get_state(){

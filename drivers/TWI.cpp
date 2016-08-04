@@ -4,7 +4,7 @@
  *  Created on: 16 трав. 2016
  *      Author: alfons-14
  */
-#include "../drivers/TWI.h"
+#include "TWI.h"
 #include <avr/interrupt.h>
 
 #if TWI_UART_DEBUG==1

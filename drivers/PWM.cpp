@@ -20,11 +20,3 @@ void PWM_init(){
 	DRIVER(PWM1p, OUT);
 	DRIVER(PWM2p, OUT);
 }
-
-//void PWM1(uint8_t val){
-//	OCR1A = val;
-//}
-
-//void PWM2(uint8_t val){
-//	OCR1B = val;
-//}

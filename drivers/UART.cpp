@@ -8,15 +8,15 @@
 #include "../drivers/UART.h"
 
 void UART_init (){
-	UBRRH = HI(bauddivider(baudrate));
-	UBRRL = LO(bauddivider(baudrate));
-	UCSRC = ( 1 << URSEL ) | ( 1 << UCSZ1 ) | ( 1 << UCSZ0 );
-	UCSRB = ( 1 << TXEN ) | ( 1 << RXEN );
+	UBRR0H = HI(bauddivider(baudrate));
+	UBRR0L = LO(bauddivider(baudrate));
+	UCSR0C = ( 1 << UCSZ01 ) | ( 1 << UCSZ00 );
+	UCSR0B = ( 1 << TXEN0 ) | ( 1 << RXEN0 );
 }
 
 void UART_send(char a){ // single char
-	while( ( UCSRA & ( 1 << UDRE ) ) == 0 );
-	UDR = a;
+	while( ( UCSR0A & ( 1 << UDRE0 ) ) == 0 );
+	UDR0 = a;
 }
 
 void UART_send(char *s){ //string

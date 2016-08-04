@@ -8,7 +8,7 @@
 #ifndef TWI_H_
 #define TWI_H_
 
-#define TWI_FREQ 100000
+#define TWI_FREQ 100000UL
 #define TWI_UART_DEBUG	0 //uses sprintf and very slow
 typedef unsigned char uint8_t;
 

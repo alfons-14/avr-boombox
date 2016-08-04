@@ -15,9 +15,7 @@
 
 void PWM_init();
 #define PWM1 OCR1A
-//void PWM1(uint8_t);
 #define PWM2 OCR1B
-//void PWM2(uint8_t);
 
 
 #endif /* PWM_H_ */
