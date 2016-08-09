@@ -17,10 +17,16 @@
 #include "libs/TEA5767N.h"
 #include "drivers/PWM.h"
 #include "libs/RTC.h"
+#include "drivers/ADC.h"
+#include "libs/jobs.h"
 
 typedef OS::process<OS::pr0, 50> p1;
-typedef OS::process<OS::pr1, 100> p2;
-typedef OS::process<OS::pr2, 100> p3;
+typedef OS::process<OS::pr1, 200> p2;
+typedef OS::process<OS::pr2, 400> p3;
+
+OS::channel<TJob*, 4> JobHighPr;
+OS::channel<TJob*, 4> JobLowPr;
+
 
 p2 hard;
 p1 adc;
@@ -30,6 +36,10 @@ TDA7439 audio = TDA7439();
 TEA5767N radio = TEA5767N();
 RTC rtc = RTC(0x68); //ds3231
 
+
+TLCDTimeUpdate LCDTimeUpdate(&rtc);
+TLCDBattUpdate LCDBattUpdate();
+TLCDSecLineUpdate LCDSecLineUpdate(&radio, &audio);
 //TDA7439 inputs
 //3.5mm
 #define IN3_5 IN2
@@ -48,6 +58,7 @@ volatile uint8_t sig;
 volatile uint16_t button;
 volatile bool pressed = false;
 volatile bool longpress = false;
+volatile bool charging = false;
 
 uint8_t getADC() {
 	ADCSRA |= 1 << ADSC;
@@ -75,21 +86,19 @@ uint8_t getADC() {
 	return 10;
 }
 
-char chars[][8] { { 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001,
-		0b10001, 0b11111 }, { 0b01110, 0b11111, 0b10001, 0b10001, 0b10001,
-		0b10001, 0b11111, 0b11111 }, { 0b01110, 0b11111, 0b10001, 0b10001,
-		0b10001, 0b11111, 0b11111, 0b11111 }, { 0b01110, 0b11111, 0b10001,
-		0b10001, 0b11111, 0b11111, 0b11111, 0b11111 }, { 0b01110, 0b11111,
-		0b10001, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 }, { 0b01110,
-		0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 },
+char chars[][8] = { { 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111 },
+		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111 },
+		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111 },
+		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111 },
+		{ 0b01110, 0b11111, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 },
+		{ 0b01110, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 },
 		{ 0b00011, 0b00110, 0b01100, 0b11111, 0b11111, 0b00110, 0b01100, 0b11000 },
 		{ 0b10101, 0b10101, 0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100 } };
 
 int main() {
 	UART_init();
 	TWI_init();
-	ADMUX = 0b00000000; //ADC_init
-	ADCSRA = 0b10000101;
+	ADC_init();
 	PWM_init();
 	PWM1=50;
 	encoder_init();
@@ -150,6 +159,7 @@ template<> OS_PROCESS void p2::exec() {
 			tuning_input = true;
 			break;
 		case 5:
+			charging = !charging;
 			break;
 		case 6:
 			break;
@@ -196,7 +206,8 @@ template<> OS_PROCESS void p2::exec() {
 				case 1:
 					if (audio.tone.bass + encoder_get_state() < -7)
 						audio.tone.bass = -7;
-					else if (audio.tone.bass + encoder_get_state() > 7)
+					else
+					if (audio.tone.bass + encoder_get_state() > 7)
 						audio.tone.bass = 7;
 					else
 						audio.tone.bass += encoder_get_state();
@@ -204,7 +215,8 @@ template<> OS_PROCESS void p2::exec() {
 				case 2:
 					if (audio.tone.middle + encoder_get_state() < -7)
 						audio.tone.middle = -7;
-					else if (audio.tone.middle + encoder_get_state() > 7)
+					else
+					if (audio.tone.middle + encoder_get_state() > 7)
 						audio.tone.middle = 7;
 					else
 						audio.tone.middle += encoder_get_state();
@@ -212,7 +224,8 @@ template<> OS_PROCESS void p2::exec() {
 				case 3:
 					if (audio.tone.treble + encoder_get_state() < -7)
 						audio.tone.treble = -7;
-					else if (audio.tone.treble + encoder_get_state() > 7)
+					else
+					if (audio.tone.treble + encoder_get_state() > 7)
 						audio.tone.treble = 7;
 					else
 						audio.tone.treble += encoder_get_state();
@@ -235,17 +248,18 @@ template<> OS_PROCESS void p2::exec() {
 			longpress = false;
 		if (!pressed)
 			button = 0;
-		sleep(5);
+		sleep(10);
 	}
 }
 }
 
-namespace OS { //LCD update
+namespace OS { //tasks
 template<> OS_PROCESS void p3::exec() {
 	char buf[16];
-	uint8_t i;
+	uint8_t i=0, ch=0, d=0;
 	for (;;) {
-		LOCK_SYSTEM_TIMER();
+//		adc.sleep();
+//		LOCK_SYSTEM_TIMER(); //block process switching
 		LCD_go_to_xy(0,0);
 //		if (!pressed){
 //		if(longpress) LCD_print("LP");
@@ -260,8 +274,21 @@ template<> OS_PROCESS void p3::exec() {
 		LCD_print(':');
 		LCD_print(rtc.min.h+'0');
 		LCD_print(rtc.min.l+'0');
-		UNLOCK_SYSTEM_TIMER();
-		LOCK_SYSTEM_TIMER();
+		if(charging) {
+			LCD_go_to_xy(14,0);
+			LCD_print(7);
+			LCD_print(ch+1);
+			if (!(d++%10)){
+				ch=(ch+1)%6;
+			}
+		}
+		else{
+			LCD_go_to_xy(14,0);
+			LCD_print(" ");
+			LCD_print(ch+1);
+		}
+//		UNLOCK_SYSTEM_TIMER();
+//		LOCK_SYSTEM_TIMER();
 		LCD_go_to_xy(0, 1);
 		if (tuning && !tuning_input) {
 			switch (setting) {
@@ -324,7 +351,7 @@ template<> OS_PROCESS void p3::exec() {
 				LCD_print(utoa((uint8_t) freq, buf, 10));
 				LCD_print('.');
 				LCD_print(utoa((uint8_t) (freq * 100 + 5) / 10 % 10, buf, 10));
-				LCD_print(" MHz    ");
+				LCD_print(" MHz     ");
 				LCD_go_to_xy(13, 1);
 				LCD_print(8);
 				if (sig < 10)
@@ -333,7 +360,8 @@ template<> OS_PROCESS void p3::exec() {
 				break;
 			}
 		}
-		UNLOCK_SYSTEM_TIMER();
+//		UNLOCK_SYSTEM_TIMER();
+//		adc.wake_up();
 		sleep(10);
 	}
 }
