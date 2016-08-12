@@ -1,9 +1,10 @@
 /*
  * main.cpp
  *
- *  Created on: 16 трав. 2016
+ *  Created on: 8 серп. 2016 р.
  *      Author: alfons-14
  */
+
 #include <avr/io.h>
 #include "scmRTOS/core/scmRTOS.h"
 #include "libs/pin_macros.h"
@@ -19,18 +20,24 @@
 #include "libs/RTC.h"
 #include "drivers/ADC.h"
 #include "libs/jobs.h"
+#include <avr/pgmspace.h>
 
-typedef OS::process<OS::pr0, 50> p1;
-typedef OS::process<OS::pr1, 200> p2;
-typedef OS::process<OS::pr2, 400> p3;
+
+typedef OS::process<OS::pr0, 100> Tp0;
+typedef OS::process<OS::pr1, 100> Tp1;
+typedef OS::process<OS::pr2, 100> Tp2;
+typedef OS::process<OS::pr3, 100> Tp3;
+typedef OS::process<OS::pr4, 100> Tp4;
 
 OS::channel<TJob*, 4> JobHighPr;
 OS::channel<TJob*, 4> JobLowPr;
 
+Tp0 p0;
+Tp1 p1;
+Tp2 p2;
+Tp3 p3;
+Tp4 p4;
 
-p2 hard;
-p1 adc;
-p3 LCD;
 
 TDA7439 audio = TDA7439();
 TEA5767N radio = TEA5767N();
@@ -38,331 +45,230 @@ RTC rtc = RTC(0x68); //ds3231
 
 
 TLCDTimeUpdate LCDTimeUpdate(&rtc);
-TLCDBattUpdate LCDBattUpdate();
+TLCDBattUpdate LCDBattUpdate(true);
 TLCDSecLineUpdate LCDSecLineUpdate(&radio, &audio);
-//TDA7439 inputs
-//3.5mm
-#define IN3_5 IN2
-//6.3mm
-#define IN6_3 IN3
-//fm radio
-#define INFM IN1
-//bluetooth
-#define INBL IN4
+TLCDFMSigUpdate LCDFMSigUpdate(&radio);
 
-volatile bool tuning = false;
-volatile bool tuning_input = false;
-volatile uint8_t setting = 0; //volume, bass, etc...
-volatile float freq = 107.0;
-volatile uint8_t sig;
-volatile uint16_t button;
-volatile bool pressed = false;
-volatile bool longpress = false;
-volatile bool charging = false;
+float freq;
 
-uint8_t getADC() {
-	ADCSRA |= 1 << ADSC;
-	while (!(ADCSRA & (1 << ADIF)));
-	if (ADC < 200)
-		return 0;
-	if (ADC < 400)
-		return 1;
-	if (ADC < 500)
-		return 2;
-	if (ADC < 550)
-		return 3;
-	if (ADC < 620)
-		return 4;
-	if (ADC < 700)
-		return 5;
-	if (ADC < 760)
-		return 6;
-	if (ADC < 830)
-		return 7;
-	if (ADC < 900)
-		return 8;
-	if (ADC < 980)
+#define PROGMEM_CHARS 0
+
+#if PROGMEM_CHARS == 1
+
+const char char1[8] PROGMEM =	{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111 };
+const char char2[8] PROGMEM =	{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111 };
+const char char3[8] PROGMEM =	{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111 };
+const char char4[8] PROGMEM =	{ 0b01110, 0b11111, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111 };
+const char char5[8] PROGMEM =	{ 0b01110, 0b11111, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 };
+const char char6[8] PROGMEM =	{ 0b01110, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 };
+const char char7[8] PROGMEM =	{ 0b00011, 0b00110, 0b01100, 0b11111, 0b11111, 0b00110, 0b01100, 0b11000 };
+const char char8[8] PROGMEM =	{ 0b10101, 0b10101, 0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100 };
+
+const char* const chars[] PROGMEM ={
+    char1,
+    char2,
+    char3,
+    char4,
+    char5,
+    char6,
+    char7,
+    char8
+};
+
+char buf[8];
+
+#else
+
+char chars[][8] = {
+	{0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111},
+	{0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111},
+	{0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111},
+	{0b01110, 0b11111, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111},
+	{0b01110, 0b11111, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111},
+	{0b01110, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111},
+	{0b00011, 0b00110, 0b01100, 0b11111, 0b11111, 0b00110, 0b01100, 0b11000},
+	{0b10101, 0b10101, 0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100}
+};
+
+#endif
+
+uint8_t getButton() {
+	uint16_t res=ADC_get_result_from(0);
+	if (res < 200)
+		return 10;
+	if (res < 400)
 		return 9;
-	return 10;
+	if (res < 500)
+		return 8;
+	if (res < 550)
+		return 7;
+	if (res < 620)
+		return 6;
+	if (res < 700)
+		return 5;
+	if (res < 760)
+		return 4;
+	if (res < 830)
+		return 3;
+	if (res < 900)
+		return 2;
+	if (res < 980)
+		return 1;
+	return 0;
 }
 
-char chars[][8] = { { 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111 },
-		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111 },
-		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111 },
-		{ 0b01110, 0b11111, 0b10001, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111 },
-		{ 0b01110, 0b11111, 0b10001, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 },
-		{ 0b01110, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111 },
-		{ 0b00011, 0b00110, 0b01100, 0b11111, 0b11111, 0b00110, 0b01100, 0b11000 },
-		{ 0b10101, 0b10101, 0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100 } };
+int main(){
+  TWI_init();
+  enable_interrupts();
+  UART_init();
+  ADC_init();
+  LCD_init();
+  encoder_init();
+  char i;
+  for (i = 1; i < 9; i++){
+#if PROGMEM_CHARS == 1
+      strcpy_P(buf, (char*)pgm_read_word(&(chars[i-1])));
+      LCD_create_char(i, buf);
+#else
+      LCD_create_char(i, &chars[i - 1][0]);
+#endif
+  }
+  TIMER0_CS_REG = (1 << CS01) | (1 << CS00); // clk/64
+  TIMER0_IE_REG |= (1 << TOIE0);
+  OS::run();
+}
 
-int main() {
-	UART_init();
-	TWI_init();
-	ADC_init();
-	PWM_init();
-	PWM1=50;
-	encoder_init();
-	enable_interrupts();
-	LCD_init();
-	char i;
-	for (i = 1; i < 9; i++)
-		LCD_create_char(i, &chars[i - 1][0]);
-	LCD_go_to_xy(15, 0);
-	LCD_print(5);
-	LCD_backlight(1);
-	radio.setHighCutControlOn();
-	radio.setStereoNoiseCancellingOn();
-	radio.selectFrequency(freq);
-	radio.setSearchLowStopLevel();
-	TIMER0_CS_REG = (1 << CS01) | (1 << CS00); // clk/64
-	TIMER0_IE_REG |= (1 << TOIE0);
-	OS::run();
-	//LCD_go_to_xy(14,0);
-	//LCD_print(7);
-	//LCD_print(i+1);
-	//i=(i+1)%6;
-	//sleep(100);
+
+namespace OS {
+template<> OS_PROCESS void Tp0::exec() {
+	for (;;) {
+	    rtc.update();
+	    JobLowPr.push(&LCDBattUpdate);
+	    JobLowPr.push(&LCDTimeUpdate);
+	    if(audio.input==INFM &&LCDSecLineUpdate.mode==LCD_INPUT) JobLowPr.push(&LCDFMSigUpdate);
+	    sleep(300);
+	}
+}
 }
 
 namespace OS {
-template<> OS_PROCESS void p1::exec() {
+template<> OS_PROCESS void Tp1::exec() {
 	for (;;) {
-		rtc.update();
-		sleep(1000);
-	}
-}
-}
-namespace OS { //read buttons and update hardware: TDA7439, TEA5767
-template<> OS_PROCESS void p2::exec() {
-	uint_fast32_t timeout = 0;
-	uint8_t adc;
-	for (;;) {
-		adc = getADC();
-		if (adc == 10)
-			pressed = false;
-		else {
-			button++;
-			pressed = true;
-		}
-		switch (adc) {
-		case 0:
-		case 1:
-		case 2:
-		case 3:
-			setting = adc;
-			timeout = get_tick_count() + 1000;
-			tuning = true;
-			tuning_input = false;
-			break;
-		case 4:
-			timeout = get_tick_count() + 1000;
-			tuning_input = true;
-			break;
-		case 5:
-			charging = !charging;
-			break;
-		case 6:
-			break;
-		case 7:
-			break;
-		case 8:
-//			if(!pressed && button!=0){
-//			if(button<10){
-//				freq-=.1;
-//				radio.selectFrequency(freq);
-//			}
-//			else{
-			radio.setSearchDown();
-			radio.searchNextMuting();
-			freq = radio.readFrequencyInMHz();
-//			}
-//			}
-			break;
-		case 9:
-//			if(!pressed && button!=0){
-//			if(button<10){
-//				freq+=.1;
-//				radio.selectFrequency(freq);
-//			}
-//			else{
-			radio.setSearchUp();
-			radio.searchNextMuting();
-			freq = radio.readFrequencyInMHz();
-//			}
-//			}
-			break;
-		}
-		if (encoder_get_state() != 0) {
-			timeout = get_tick_count() + 1000;
-			if (tuning && !tuning_input) {
-				switch (setting) {
-				case 0:
-					audio.volume += encoder_get_state();
-					if (audio.volume > 0)
-						audio.volume = 0;
-					if (audio.volume < -47)
-						audio.volume = -47;
-					break;
-				case 1:
-					if (audio.tone.bass + encoder_get_state() < -7)
-						audio.tone.bass = -7;
-					else
-					if (audio.tone.bass + encoder_get_state() > 7)
-						audio.tone.bass = 7;
-					else
-						audio.tone.bass += encoder_get_state();
-					break;
-				case 2:
-					if (audio.tone.middle + encoder_get_state() < -7)
-						audio.tone.middle = -7;
-					else
-					if (audio.tone.middle + encoder_get_state() > 7)
-						audio.tone.middle = 7;
-					else
-						audio.tone.middle += encoder_get_state();
-					break;
-				case 3:
-					if (audio.tone.treble + encoder_get_state() < -7)
-						audio.tone.treble = -7;
-					else
-					if (audio.tone.treble + encoder_get_state() > 7)
-						audio.tone.treble = 7;
-					else
-						audio.tone.treble += encoder_get_state();
-					break;
-				}
-			} else if (tuning_input)
-				audio.input = (audio.input + encoder_get_state()) & 0b11;
-			encoder_reset();
-			tuning = true;
-			audio.upload();
-		}
-		if (timeout == get_tick_count()) {
-			setting = 0;
-			tuning = false;
-			tuning_input = false;
-		}
-		if (button > 10)
-			longpress = true;
-		else
-			longpress = false;
-		if (!pressed)
-			button = 0;
-		sleep(10);
+	    TJob *Job;
+	    JobHighPr.pop(Job);
+	    Job->execute();
 	}
 }
 }
 
-namespace OS { //tasks
-template<> OS_PROCESS void p3::exec() {
-	char buf[16];
-	uint8_t i=0, ch=0, d=0;
+namespace OS {
+template<> OS_PROCESS void Tp2::exec() {
 	for (;;) {
-//		adc.sleep();
-//		LOCK_SYSTEM_TIMER(); //block process switching
-		LCD_go_to_xy(0,0);
-//		if (!pressed){
-//		if(longpress) LCD_print("LP");
-//		else LCD_print("SP");}
-//		else LCD_print("p");
-//		LCD_print(utoa(pressed, buf, 10));
-//		LCD_print(" ");
-//		LCD_print(utoa(button, buf, 10));
-//		LCD_print("      ");
-		LCD_print(rtc.hour.h+'0');
-		LCD_print(rtc.hour.l+'0');
-		LCD_print(':');
-		LCD_print(rtc.min.h+'0');
-		LCD_print(rtc.min.l+'0');
-		if(charging) {
-			LCD_go_to_xy(14,0);
-			LCD_print(7);
-			LCD_print(ch+1);
-			if (!(d++%10)){
-				ch=(ch+1)%6;
-			}
+	    if(encoder_get_state()){
+		switch(LCDSecLineUpdate.mode){
+		  case LCD_BASS:
+		    if(audio.tone.bass+encoder_get_state()<-7) audio.tone.bass=-7;
+		    else
+		    if(audio.tone.bass+encoder_get_state()>7) audio.tone.bass=7;
+		    else audio.tone.bass+=encoder_get_state();
+		    break;
+		  case LCD_TREBLE:
+		    if(audio.tone.treble+encoder_get_state()<-7) audio.tone.treble=-7;
+		    else
+		    if(audio.tone.treble+encoder_get_state()>7) audio.tone.treble=7;
+		    else audio.tone.treble+=encoder_get_state();
+		    break;
+		  case LCD_MIDDLE:
+		    if(audio.tone.middle+encoder_get_state()<-7) audio.tone.middle=-7;
+		    else
+		    if(audio.tone.middle+encoder_get_state()>7) audio.tone.middle=7;
+		    else audio.tone.middle+=encoder_get_state();
+		    break;
+		  case LCD_INPUT_SELECT:
+		    audio.input=(audio.input+encoder_get_state())&0b11;
+		    break;
+		  default:
+		    LCDSecLineUpdate.mode=LCD_VOLUME;
+		    audio.volume+=encoder_get_state();
+		    if(audio.volume>0) audio.volume=0;
+		    if(audio.volume<-47) audio.volume=-47;
 		}
-		else{
-			LCD_go_to_xy(14,0);
-			LCD_print(" ");
-			LCD_print(ch+1);
-		}
-//		UNLOCK_SYSTEM_TIMER();
-//		LOCK_SYSTEM_TIMER();
-		LCD_go_to_xy(0, 1);
-		if (tuning && !tuning_input) {
-			switch (setting) {
-			case 0:
-				LCD_print("Volume: ");
-				LCD_print(itoa(audio.volume, buf, 10));
-				LCD_print(" db    ");
-				break;
-			case 1:
-				LCD_print("Bass: ");
-				if (audio.tone.bass > 0)
-					LCD_print('+');
-				LCD_print(itoa(2 * audio.tone.bass, buf, 10));
-				LCD_print(" db      ");
-				break;
-			case 2:
-				LCD_print("Middle: ");
-				if (audio.tone.middle > 0)
-					LCD_print('+');
-				LCD_print(itoa(2 * audio.tone.middle, buf, 10));
-				LCD_print(" db     ");
-				break;
-			case 3:
-				LCD_print("Treble: ");
-				if (audio.tone.treble > 0)
-					LCD_print('+');
-				LCD_print(itoa(2 * audio.tone.treble, buf, 10));
-				LCD_print(" db     ");
-				break;
-			}
-		} else if (tuning_input) {
-			switch (audio.input) {
-			case IN3_5:
-				LCD_print("1: 3.5mm        ");
-				break;
-			case IN6_3:
-				LCD_print("2: 6.3mm        ");
-				break;
-			case INBL:
-				LCD_print("3: Bluetooth    ");
-				break;
-			case INFM:
-				LCD_print("4: FM radio     ");
-				break;
-			}
-		} else {
-			switch (audio.input) {
-			case IN3_5:
-				LCD_print("3.5mm           ");
-				break;
-			case IN6_3:
-				LCD_print("6.3mm           ");
-				break;
-			case INBL:
-				LCD_print("Bluetooth       ");
-				break;
-			case INFM:
-				if (!((i++) % 7))
-					sig = radio.getSignalLevel(); //check signal 1 time per 7 updates of LCD
-				LCD_print(utoa((uint8_t) freq, buf, 10));
-				LCD_print('.');
-				LCD_print(utoa((uint8_t) (freq * 100 + 5) / 10 % 10, buf, 10));
-				LCD_print(" MHz     ");
-				LCD_go_to_xy(13, 1);
-				LCD_print(8);
-				if (sig < 10)
-					LCD_print('0');
-				LCD_print(utoa(sig, buf, 10));
-				break;
-			}
-		}
-//		UNLOCK_SYSTEM_TIMER();
-//		adc.wake_up();
-		sleep(10);
+		LCDSecLineUpdate.timeout = get_tick_count()+1000;
+		JobLowPr.push(&LCDSecLineUpdate);
+		encoder_reset();
+	    }
+	    sleep(20);
 	}
 }
 }
+
+namespace OS {
+template<> OS_PROCESS void Tp3::exec() {
+  uint8_t butt;
+  uint_fast32_t time;
+  bool pressed=false;
+	for (;;) {
+	    butt = getButton();
+	    if(!pressed){
+		switch(butt){
+		  case 10:
+		    LCDSecLineUpdate.mode = LCD_VOLUME;
+		    break;
+		  case 9:
+		    LCDSecLineUpdate.mode = LCD_BASS;
+		    break;
+		  case 8:
+		    LCDSecLineUpdate.mode = LCD_MIDDLE;
+		    break;
+		  case 7:
+		    LCDSecLineUpdate.mode = LCD_TREBLE;
+		    break;
+		  case 6:
+		    LCDBattUpdate.charging=!LCDBattUpdate.charging;
+		    break;
+		  case 5:
+		    LCDSecLineUpdate.mode = LCD_INPUT_SELECT;
+		    break;
+		  case 4:
+		  case 3:
+		  case 2:
+		    radio.setSearchDown();
+		    radio.searchNextMuting();
+		    freq=radio.readFrequencyInMHz();
+		    LCDSecLineUpdate.freq = (uint16_t)(freq*100);
+		    break;
+		  case 1:
+		    radio.setSearchUp();
+		    radio.searchNextMuting();
+		    freq=radio.readFrequencyInMHz();
+		    LCDSecLineUpdate.freq = (uint16_t)(freq*100);
+		    break;
+		  case 0: pressed=false;
+		    break;
+		}
+		if(butt){
+		    time = get_tick_count();
+		    JobLowPr.push(&LCDSecLineUpdate);
+		    LCDSecLineUpdate.timeout = get_tick_count()+1000;
+		}
+	    }
+	    if (LCDSecLineUpdate.timeout <= get_tick_count()){
+		LCDSecLineUpdate.mode=LCD_INPUT;
+		JobLowPr.push(&LCDSecLineUpdate);
+	    }
+	    pressed = bool(butt);
+	    sleep(20);
+	}
+}
+}
+
+namespace OS {
+template<> OS_PROCESS void Tp4::exec() {
+	for (;;) {
+	    TJob *Job;
+	    JobLowPr.pop(Job);
+	    Job->execute();
+	}
+}
+}
+

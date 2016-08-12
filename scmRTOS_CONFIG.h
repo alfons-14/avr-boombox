@@ -57,7 +57,7 @@ typedef uint_fast32_t tick_count_t;
 //    Specify scmRTOS Process Count. Must be less then 31
 //
 //
-#define  scmRTOS_PROCESS_COUNT              3
+#define  scmRTOS_PROCESS_COUNT              5
 
 
 //------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ typedef uint_fast32_t tick_count_t;
 //
 //    TISRW_SS : ISR Wrapper with separate ISR stack software switching
 //
-#define scmRTOS_ISRW_TYPE   TISRW
+#define scmRTOS_ISRW_TYPE   TISRW_SS
 
 //-----------------------------------------------------------------------------
 //

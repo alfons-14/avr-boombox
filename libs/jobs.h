@@ -13,7 +13,7 @@
 #include "TDA7439.h"
 #include "TEA5767N.h"
 
-class TLCDTimeUpdate : TJob{
+class TLCDTimeUpdate : public TJob{
 protected:
   RTC* rtc;
 public:
@@ -21,7 +21,7 @@ public:
   virtual void execute();
 };
 
-class TLCDBattUpdate : TJob{
+class TLCDBattUpdate : public TJob{
 protected:
 public:
   bool charging = false;
@@ -36,15 +36,33 @@ public:
 #define LCD_MIDDLE 2
 #define LCD_TREBLE 3
 #define LCD_INPUT 4
+#define LCD_VOLUME 5
 
-class TLCDSecLineUpdate : TJob{
+//inputs
+#define INFM IN1
+#define IN35 IN2
+#define IN63 IN3
+#define INBL IN4
+
+class TLCDSecLineUpdate : public TJob{
 protected:
   char buf[17];
   TEA5767N* radio;
   TDA7439* audio;
-  uint8_t mode;
 public:
+  uint8_t mode;
+  uint16_t freq;
+  uint_fast32_t timeout;
   TLCDSecLineUpdate(TEA5767N*, TDA7439*);
+  virtual void execute();
+};
+
+class TLCDFMSigUpdate : public TJob{
+protected:
+  TEA5767N* radio;
+  uint8_t level;
+public:
+  TLCDFMSigUpdate(TEA5767N*);
   virtual void execute();
 };
 
