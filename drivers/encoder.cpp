@@ -21,10 +21,9 @@ void encoder_init(){
 	DRIVER(P1, PULLUP);
 	DRIVER(P2, IN);
 	DRIVER(P2, PULLUP);
-	TIMSK2|=(1 << OCIE2A);
-	TCCR2A= (1<<WGM21)|(0<<WGM20);
-	TCCR2B= (1<<CS22)|(1<<CS21)|(0<<CS20); //CTC mode, clck/64
-	OCR2A = 5;
+	//port d
+	PCMSK2 = (1 << PCINT19) | (1 << PCINT18);
+	PCICR = (1 << PCIE2);
 }
 
 int8_t encoder_get_state(){
@@ -35,7 +34,8 @@ void encoder_reset(){
 	state=0;
 }
 
-ISR(TIMER2_COMPA_vect){
+ISR(PCINT2_vect){
+	PCICR &= ~(1 << PCIE2);
 	uint8_t a=((bool)ACTIVE(P2)<<1)|((bool)ACTIVE(P1));
 	if(states[((pos-1)%4)]==a) {pos--;}
 	if(states[((pos+1)%4)]==a) {pos++;}
@@ -43,4 +43,5 @@ ISR(TIMER2_COMPA_vect){
 	case 0: state--; pos=4; break;
 	case 8: state++; pos=4;
 	}
+	PCICR |= (1 << PCIE2);
 }
