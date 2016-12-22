@@ -207,7 +207,24 @@ ISR(TWI_vect){
     		break;
     	}
     }
-
 }
 
-
+bool TWI_check_for(uint8_t addr){
+  while(TWI.busy);
+  uint8_t sreg;
+  sreg = SREG;
+  cli();
+  bool result;
+  TWI_START;
+  while (TWCR & (1 << TWINT)); //because interrupts disabled
+  TWDR = addr << 1;
+  TWI_SEND;
+  while (TWCR & (1 << TWINT)); //because interrupts disabled
+  if (TWSR == TWI_SLA_W_ACK_)
+  result = true;
+  else result = false;
+  TWI_STOP;
+  TWI_ENABLE;
+  SREG = sreg;
+  return result;
+}

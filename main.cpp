@@ -21,13 +21,13 @@
 #include "drivers/ADC.h"
 #include "libs/jobs.h"
 #include <avr/pgmspace.h>
-
+#include "bombox.h"
 
 typedef OS::process<OS::pr0, 100> Tp0;
 typedef OS::process<OS::pr1, 100> Tp1;
 typedef OS::process<OS::pr2, 100> Tp2;
 typedef OS::process<OS::pr3, 100> Tp3;
-typedef OS::process<OS::pr4, 100> Tp4;
+typedef OS::process<OS::pr4, 500> Tp4;
 
 OS::channel<TJob*, 4> JobHighPr;
 OS::channel<TJob*, 4> JobLowPr;
@@ -50,8 +50,6 @@ TLCDSecLineUpdate LCDSecLineUpdate(&radio, &audio);
 TLCDFMSigUpdate LCDFMSigUpdate(&radio);
 
 float freq;
-
-#define PROGMEM_CHARS 0
 
 #if PROGMEM_CHARS == 1
 
@@ -93,26 +91,26 @@ char chars[][8] = {
 #endif
 
 uint8_t getButton() {
-	uint16_t res=ADC_get_result_from(0);
-	if (res < 200)
+	uint16_t res=ADC_get_result_from(2);
+	if (res < BUT0)
 		return 10;
-	if (res < 400)
+	if (res < BUT1)
 		return 9;
-	if (res < 500)
+	if (res < BUT2)
 		return 8;
-	if (res < 550)
+	if (res < BUT3)
 		return 7;
-	if (res < 620)
+	if (res < BUT4)
 		return 6;
-	if (res < 700)
+	if (res < BUT5)
 		return 5;
-	if (res < 760)
+	if (res < BUT6)
 		return 4;
-	if (res < 830)
+	if (res < BUT7)
 		return 3;
-	if (res < 900)
+	if (res < BUT8)
 		return 2;
-	if (res < 980)
+	if (res < BUT9)
 		return 1;
 	return 0;
 }
@@ -122,8 +120,13 @@ int main(){
   enable_interrupts();
   UART_init();
   ADC_init();
+  ADC_set_ref(ANALOG_REF);
   LCD_init();
   encoder_init();
+  radio.setHighCutControlOff();
+  radio.selectFrequency(101.5);
+  radio.setStereoNoiseCancellingOn();
+  radio.setMonoReception();
   char i;
   for (i = 1; i < 9; i++){
 #if PROGMEM_CHARS == 1
@@ -133,6 +136,18 @@ int main(){
       LCD_create_char(i, &chars[i - 1][0]);
 #endif
   }
+#if BUTCAL==true
+ while(1){
+      char buf[10];
+      LCD_go_to_xy(0, 0);
+      utoa(ADC_get_result_from(2), buf, 10);
+      LCD_print(buf);
+      LCD_print("    ");
+      LCD_go_to_xy(0, 1);
+      LCD_print(utoa(getButton(), buf, 10));
+      LCD_print("   ");
+  }
+#endif
   TIMER0_CS_REG = (1 << CS01) | (1 << CS00); // clk/64
   TIMER0_IE_REG |= (1 << TOIE0);
   OS::run();
@@ -196,6 +211,7 @@ template<> OS_PROCESS void Tp2::exec() {
 		LCDSecLineUpdate.timeout = get_tick_count()+1000;
 		JobLowPr.push(&LCDSecLineUpdate);
 		encoder_reset();
+		audio.upload();
 	    }
 	    sleep(20);
 	}
@@ -211,39 +227,37 @@ template<> OS_PROCESS void Tp3::exec() {
 	    butt = getButton();
 	    if(!pressed){
 		switch(butt){
-		  case 10:
+		  case VOL:
 		    LCDSecLineUpdate.mode = LCD_VOLUME;
 		    break;
-		  case 9:
+		  case BAS:
 		    LCDSecLineUpdate.mode = LCD_BASS;
 		    break;
-		  case 8:
+		  case MID:
 		    LCDSecLineUpdate.mode = LCD_MIDDLE;
 		    break;
-		  case 7:
+		  case TRE:
 		    LCDSecLineUpdate.mode = LCD_TREBLE;
 		    break;
-		  case 6:
+		  case SETB:
 		    LCDBattUpdate.charging=!LCDBattUpdate.charging;
 		    break;
-		  case 5:
+		  case INP:
 		    LCDSecLineUpdate.mode = LCD_INPUT_SELECT;
 		    break;
-		  case 4:
-		  case 3:
-		  case 2:
+		  case SDW:
 		    radio.setSearchDown();
 		    radio.searchNextMuting();
 		    freq=radio.readFrequencyInMHz();
 		    LCDSecLineUpdate.freq = (uint16_t)(freq*100);
 		    break;
-		  case 1:
+		  case SUP:
 		    radio.setSearchUp();
 		    radio.searchNextMuting();
 		    freq=radio.readFrequencyInMHz();
 		    LCDSecLineUpdate.freq = (uint16_t)(freq*100);
 		    break;
-		  case 0: pressed=false;
+		  case NOPRESS: pressed=false;
 		    break;
 		}
 		if(butt){
@@ -251,6 +265,7 @@ template<> OS_PROCESS void Tp3::exec() {
 		    JobLowPr.push(&LCDSecLineUpdate);
 		    LCDSecLineUpdate.timeout = get_tick_count()+1000;
 		}
+		audio.upload();
 	    }
 	    if (LCDSecLineUpdate.timeout <= get_tick_count()){
 		LCDSecLineUpdate.mode=LCD_INPUT;

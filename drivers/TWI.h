@@ -61,5 +61,6 @@ void TWI_send(uint8_t, uint8_t*, uint8_t);
 void TWI_send_byte(uint8_t, uint8_t);
 void TWI_receive(uint8_t, uint8_t*, uint8_t);
 void TWI_repeat();
+bool TWI_check_for(uint8_t);
 
 #endif /* TWI_H_ */
